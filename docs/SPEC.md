@@ -48,13 +48,14 @@ reached the sound process when it was pressed). Sounding notes keep their values
 
 ## Screens
 
-240 × 240, a NeXTSTEP homage: mid grey (#AAAAAA) window background, a black title bar with white text, light grey
+240 × 240, a NeXTSTEP homage: mid grey (#AAAAAA) window background, a small dark grey title band with white text, light grey
 and dark grey bevels for buttons and slider wells, black text, white for highlights. Every screen is drawn lazily (a
 signature per screen, redrawn only on change); the voice meters update at most a few times a second.
 
 ### MAIN (the Looching window)
 
-- Top band: `LOOCHING 2026` in the small font, white on dark grey, 18 px: the same band as the status strip.
+- Top band: `LOOCHING 2026` in the small font, left-justified, white on dark grey, 18 px: the same band as the status
+  strip (every page's title is in this band: `Preferences`, `Info`).
 - Top left: the LoochityDog icon (48 × 48, 2-bit grey, converted from the original's `LoochityDog.tiff`).
 - Top right: the RELAX / ENOUGH! button, bevelled, drawn pressed while running.
 - Left: the five tone rows as radio buttons, the current one filled.

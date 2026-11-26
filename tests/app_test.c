@@ -69,6 +69,9 @@ static void screen(void)
     check("boot: the name band, white on dark grey like the status strip", count(0, 0, 240, BAND_H, NX_DARK) > 3000u &&
                                                                               bright(0, 0, 240, BAND_H) > 100u &&
                                                                               count(0, 0, 240, BAND_H, NX_BLACK) == 0u);
+    check("boot: the name left-justified (at the status strip's x)", bright(0, 0, 120, BAND_H) > 100u &&
+                                                                     bright(120, 0, 240, BAND_H) < 20u &&
+                                                                     bright(0, 0, 6, BAND_H) == 0u);
     check("boot: the band as tall as the status strip", host_fb[(BAND_H - 1u) * 240u + 2u] == NX_DARK &&
                                                          host_fb[BAND_H * 240u + 2u] == NX_LIGHT &&
                                                          host_fb[(240u - BAND_H) * 240u + 2u] == NX_DARK &&
@@ -158,6 +161,10 @@ static void screen(void)
     host_frame();
     check("GLO KNOB 1..4: mode, MIDI out, key LEDs, level", set.mode == MODE_INTENDED && !set.midi_out &&
                                                                 !set.leds && set.level == 75u);
+    check("GLO: the same title band (dark grey, 18 px, left)", count(0, 0, 240, BAND_H, NX_DARK) > 3000u &&
+                                                               host_fb[BAND_H * 240u + 2u] == NX_LIGHT &&
+                                                               bright(0, 0, 120, BAND_H) > 60u &&
+                                                               bright(120, 0, 240, BAND_H) == 0u);
     host_png("build/shots/glo.png");
     host_turn(EN_K1, -1);
     host_turn(EN_K2, 1);
@@ -165,7 +172,8 @@ static void screen(void)
     host_frame();
     press(B_EDIT);
     check("EDIT: INFO", ui.page == PG_INFO && host_led[panel.btn[B_EDIT]]);
-    check("INFO: the dog drawn", count(12, 44, 60, 92, NX_BLACK) > 150u);
+    check("INFO: the dog drawn", count(12, PAGE_Y0 + 8, 60, PAGE_Y0 + 56, NX_BLACK) > 150u);
+    check("INFO: the same title band", count(0, 0, 240, BAND_H, NX_DARK) > 3000u && host_fb[BAND_H * 240u + 2u] == NX_LIGHT);
     host_png("build/shots/info.png");
     press(B_HOME);
     host_press(B_HOME, 1);                       /* HOME held: INFO */

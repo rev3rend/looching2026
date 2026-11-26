@@ -89,21 +89,18 @@ static void nx_dog(int32_t x, int32_t y)         /* the LoochityDog icon (tools/
         }
 }
 
-#define BAND_H 18                /* MAIN's name band and the status strip: the same small band, top and bottom */
+#define BAND_H 18                /* the title band and MAIN's status strip: the same small band, top and bottom */
 #define TOP_Y 24                 /* MAIN: the dog and RELAX / ENOUGH! (24..82) */
 #define MID_Y 88                 /* MAIN: the tone rows and the sliders (88..172) */
 
-static void draw_band(void)                      /* MAIN's name: small, white on dark grey, as the status strip */
+#define PAGE_Y0 26                /* GLO, INFO: the panel (26..150) */
+#define PAGE_Y1 154               /* GLO, INFO: the lower part (154..234) */
+
+static void draw_band(const char *title)         /* every page's title: small, left, white on dark grey, as the
+                                                  * status strip (its text at the same x) */
 {
     cv_begin(240, BAND_H, NX_DARK);
-    cv_text_in(0, 1, 240, &AF_S, APP_NAME, NX_WHITE, NX_DARK);
-    cv_blit(0, 0);
-}
-
-static void draw_title(const aafont_t *f, const char *s)   /* GLO, INFO: the black title bar, 36 px */
-{
-    cv_begin(240, 36, NX_BLACK);
-    cv_text_in(0, (36 - (int32_t)f->h) / 2 + (f == &AF_L ? 1 : 0), 240, f, s, NX_WHITE, NX_BLACK);
+    cv_text_on(6, 1, &AF_S, title, NX_WHITE, NX_DARK);
     cv_blit(0, 0);
 }
 
@@ -208,7 +205,7 @@ static void draw_glo(void)
     fmt_int(b, set.level);
     str_cpy(b + str_len(b), " %", 4);
     glo_row(94, "K4", "LEVEL", b);
-    cv_blit(0, 36);
+    cv_blit(0, PAGE_Y0);
     cv_begin(240, 80, NX_LIGHT);
     cv_rect(0, 2, 240, 1, NX_DARK);
     cv_rect(0, 3, 240, 1, NX_WHITE);
@@ -221,7 +218,7 @@ static void draw_glo(void)
         cv_text_in(0, 28, 240, &AF_S, "one 500-sample delay, lopsided", NX_BLACK, NX_LIGHT);
         cv_text_in(0, 44, 240, &AF_S, "detune, stray and silent notes.", NX_BLACK, NX_LIGHT);
     }
-    cv_blit(0, 160);
+    cv_blit(0, PAGE_Y1);
 }
 
 /* INFO ---------------------------------------------------------------------- */
@@ -242,14 +239,14 @@ static void draw_info(void)
     nx_bevel(16, 86, 208, 36, 0);
     cv_text_in(16, 89, 208, &AF_S, "Living or dead,", NX_BLACK, NX_LIGHT);
     cv_text_in(16, 104, 208, &AF_S, "that's the big question", NX_BLACK, NX_LIGHT);
-    cv_blit(0, 36);
+    cv_blit(0, PAGE_Y0);
     cv_begin(240, 80, NX_LIGHT);
     cv_rect(0, 4, 240, 1, NX_DARK);
     cv_rect(0, 5, 240, 1, NX_WHITE);
     cv_text_in(0, 12, 240, &AF_S, v, NX_BLACK, NX_LIGHT);
     cv_text_in(0, 30, 240, &AF_S, "R. Luke DuBois and Brad Garton", NX_BLACK, NX_LIGHT);
     cv_text_in(0, 48, 240, &AF_S, "after Looching 2.0 for NeXT, 1991", NX_DARK, NX_LIGHT);
-    cv_blit(0, 160);
+    cv_blit(0, PAGE_Y1);
 }
 
 /* --------------------------------------------------------- signatures --- */
@@ -306,10 +303,7 @@ static void ui_draw(void)                        /* every area whose signature c
         for (a = 0; a < NAREAS; a++)
             ui.sig[a] = ~sig_area(a);
         lcd_fill(0, 0, 240, 240, NX_LIGHT);
-        if (ui.page == PG_MAIN)
-            draw_band();
-        else
-            draw_title(&AF_M, ui.page == PG_GLO ? "Preferences" : "Info");
+        draw_band(ui.page == PG_MAIN ? APP_NAME : ui.page == PG_GLO ? "Preferences" : "Info");
     }
     if (ui.page == PG_MAIN) {
         if ((s = sig_area(A_TOP)) != ui.sig[A_TOP]) {
