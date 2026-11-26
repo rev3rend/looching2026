@@ -11,7 +11,8 @@ you change on the FM-1, e.g. "vibrato rate limit 0.55 hertz", "tone row Schoenbe
    - Web version: also add the file name to `WebMIDI/devlist.txt` (or run `makedevlist.sh`), or load it with the
      page's file control.
    - Max version: open it from the patch.
-3. Choose the FM-1's MIDI port as MIDItoSpeech's input and **channel 1** (MIDItoSpeech's default).
+3. Choose the FM-1's MIDI port, "Looching FM-1", as MIDItoSpeech's input and **channel 1** (MIDItoSpeech's
+   default). macOS may keep showing a name it saw before for the same USB device.
 
 ## What it covers
 

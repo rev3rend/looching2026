@@ -167,6 +167,8 @@ app or damaged, values clamped); written by SAVE. It does not autostart: it alwa
   screen shows it (`tests/synthaccess_check.py`, MIDItoSpeech's parser modes: percent, floatmap with the screen's
   decimals, enumsplit, offon, the rows as presets).
 - In: none (TRS MIDI IN off by default; incoming messages are ignored).
+- **USB name:** the FM-1 shows up as "Looching FM-1" (USB product string, `firmware/src/usb.c` STR2). It keeps "FM-1"
+  so the installers find it; during an install the loader is "Felucca Update".
 
 ## Accessibility: the screen reader (fm1-reader)
 
