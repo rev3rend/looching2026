@@ -1,0 +1,16 @@
+{
+  "name": "LOOCHING 2026",
+  "title": "Looching 2026",
+  "description": "A revival of Brad Garton's 1991 NeXT drone generator Looching: four slow wavetable voices on a lazy random scheduler, with the original's tone rows, timbres and quirks.",
+  "kind": "other",
+  "version": "0.1",
+  "authors": "R. Luke DuBois and Brad Garton",
+  "year": 2026,
+  "app_id": "0xBD58C3F7",
+  "features": {
+    "trs_midi": false,
+    "ci": true,
+    "graphify": true
+  },
+  "made": "2026-11-25"
+}
