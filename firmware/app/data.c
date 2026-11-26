@@ -21,7 +21,7 @@ typedef struct {
 } settings_t;
 
 #define SET_VER 1u
-#define SET_SLOT 0u
+#define SET_SLOT 35u             /* the last slot: clear of Solinaesque (0 settings, 1..32 presets) on a shared unit */
 #define VIB_RATE_MAX 200
 #define PCT_MAX 100
 

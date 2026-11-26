@@ -137,7 +137,7 @@ results.
 
 ## What is stored
 
-One settings record (store.c, the app id): tone row, the three slider values, level, mode, MIDI out on / off, key
+One settings record (store.c slot 35, the last: clear of Solinaesque's 0..32 on a shared unit; the app id): tone row, the three slider values, level, mode, MIDI out on / off, key
 LEDs on / off, with a version and a check value. Loaded in `app_init` (the defaults when it is missing, from another
 app or damaged, values clamped); written by SAVE. It does not autostart: it always powers up stopped.
 
