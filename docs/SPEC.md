@@ -173,14 +173,23 @@ app or damaged, values clamped); written by SAVE. It does not autostart: it alwa
 - The skeleton (milestone 1) is built: `firmware/app/{data,sound,ui}.c`, the data generated from the original files
   in `assets/looching/` by `tools/gen_looch.py` (the TIFF is a NeXT 2-bit grey + alpha, planar: read by hand).
 - NeXT's four greys are fixed colours (no theme palette); text ink tops out just below pure white (the fonts' ramp).
-- The audio ISR's static cost went from the start app's 867 to 2249 (four voices, two oscillators each, at 22 050 Hz);
-  the emulator renders at ~1600x real time with the drone sounding.
+- The audio ISR's static cost went from the start app's 867 to 2249 (four voices, two oscillators each, at 22 050 Hz),
+  then 2600 with the scheduler and the delay crossfade; the emulator renders at ~1300x real time with the drone
+  sounding.
+- Milestones 2, 3 and 4 are built together (the pitch, detune and timbre quirks are part of choosing a note):
+  `sound.c snd_wake` (the loop), `snd_note` (the draws, in the original's order), `row_pitch` (both modes). The host
+  test checks the quirks statistically over 40 000 wakes (the stray 116.5 Hz and Bach's silent note ~1/28 each, the
+  detune -s/2 .. +3s/2 vs -s .. +s, ranInt's half-weight ends) and a minute through the ISR.
+- The delay crossfade on a mode change first stepped once per block (a zipper up to ~800): it now moves per sample.
+- A minute of ORIGINAL starts ~4..8 notes; three minutes ~21, peaks around -7 dBFS (Q15) as notes overlap.
 
 ## Milestones
 
 1. **Skeleton**: the three pages drawn (NeXT look, the dog icon), every control wired (values on screen, "SOON"),
    the settings record, one Bark voice playing a fixed note while running (keys do nothing), MIDI out of that note,
    tests and screenshots.
+Milestones 1..4 are done (2026-11-25); 5 (MIDI out per voice, the LEDs) works and is tested for one voice.
+
 2. **The Bark voice**: the generated wavetables, two oscillators with vibratos, the asymptotic envelope, at 22 050 Hz
    upsampled; tests for pitch, level, T60, no clicks.
 3. **The scheduler**: four voices, the PRNG and `ranInt`, the original's timings; the right-channel delay; test

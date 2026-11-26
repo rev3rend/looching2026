@@ -43,8 +43,9 @@ ok(leds()[14] === 0, "released: LED dark");
 ex.web_buttons(1 << 10);                     // PLAY: RELAX
 render(20);
 ex.web_buttons(0);
-const p = render(Math.round(44100 / N));     // 1 s of the 2 s attack
-ok(p > 0.01 && p <= 0.5, `RELAX: the drone sounds (peak ${p.toFixed(3)})`);
+let p = 0, secs = 0;                         // the scheduler's coins: a voice within the first wakes (2..10 s each)
+while (p <= 0.01 && secs < 30) { p = Math.max(p, render(Math.round(44100 / N))); secs++; }
+ok(p > 0.01 && p <= 0.5, `RELAX: the drone sounds (peak ${p.toFixed(3)} after ${secs} s)`);
 ok(leds()[ex.web_button_id(10)] === 1, "RELAX: PLAY's LED lit");
 
 const draws = ex.web_screen_draws();

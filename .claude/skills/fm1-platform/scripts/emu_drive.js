@@ -14,7 +14,7 @@ const STEPS = [                                  // Looching 2026: MAIN, RELAX, 
   ['wait', 3200],
   ['shot', 'main'],
   ['button', 'PLAY', 200],
-  ['wait', 2500],
+  ['wait', 40000],                               // a few wakes: voices on the meters (the coins vary)
   ['shot', 'running'],
   ['knob', 'PRESETS', 2],
   ['knob', 'KNOB 1', 6],

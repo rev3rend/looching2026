@@ -237,6 +237,7 @@ static void power_cycle(void)                    /* the app's RAM gone, the flas
     memset(&ui, 0, sizeof ui);
     ui.master_q8 = 256;
     memset(&snd, 0, sizeof snd);
+    memset(snd_dly, 0, sizeof snd_dly);          /* (.pool is zeroed at boot) */
     host_boot();
     host_frame();
 }
@@ -369,39 +370,53 @@ static void relax(void)                          /* PLAY, and the ISR takes it *
     host_render(buf, CTL);
 }
 
-static void sound(void)
+static void enough(void)                         /* PLAY again, the fade, silence */
 {
-    uint32_t pkt, i, n, ok, got_on = 0, got_bend = 0, bend = 0;
-    double f;
+    press(B_PLAY);
+    host_render(buf, 4096);
+}
+
+static note_t plain_note(uint32_t f0c)           /* one known note: no vibrato, no spread, amp 0.1, attack 2 s */
+{
+    note_t nt;
+    memset(&nt, 0, sizeof nt);
+    nt.f0c = nt.f1c = f0c;
+    nt.amp = (uint32_t)ENV_ONE / 10u;
+    nt.attack_ms = 2000;
+    return nt;
+}
+
+/* the Bark voice, started by hand (the scheduler stopped) */
+static void voice(void)
+{
+    uint32_t pkt, i, n = 0, ok, got_on = 0, got_bend = 0, bend = 0;
+    note_t nt;
+    double f, f2;
     host_render(buf, 4096);
     check("stopped: silence", peak(buf, 4096, 0) == 0 && peak(buf, 4096, 1) == 0);
     host_midi(0x90, 60, 100);                    /* MIDI in is not used */
     host_render(buf, 4096);
     check("stopped: a MIDI note-on in plays nothing", peak(buf, 4096, 0) == 0);
 
-    set.row = 0;                                 /* the Original's first pitch: 50 Hz; no vibrato, no spread */
-    set.vib_width = 0;
-    set.spread = 0;
     set.level = 100;
     host_adc[FM1_ADC_MASTER] = 1023;
     frames(400);                                 /* the MASTER pot read and smoothed (every 4th frame, ~16 reads) */
     drain_midi();
-    relax();
+    nt = plain_note(5000);                       /* 50 Hz, the Original's first pitch */
+    bark_start(0, &nt);
     host_render(buf, FS / CTL * CTL);            /* 1 s of the 2 s attack */
-    check("RELAX: the attack starts at 0 (no click)", max_step(buf, 4096) < 200);
+    check("voice: the attack starts at 0 (no click)", max_step(buf, 4096) < 200);
     /* a T60 of 2 s: after 23 ms, 1 - 0.001^(0.023 / 2) = 8 % of the amp (~520); after 1 s, 97 % */
-    check("RELAX: the asymptotic attack (8 % at 23 ms, > 90 % at 1 s)", peak(buf, 1024, 0) < 900 &&
+    check("voice: the asymptotic attack (8 % at 23 ms, > 90 % at 1 s)", peak(buf, 1024, 0) < 900 &&
                                                                      peak(buf + 2u * (FS - 4096u), 4096, 0) > 5600);
-    host_render(buf, 3u * FS / CTL * CTL);       /* to ~-60 dB of the target */
+    host_render(buf, 3u * FS / CTL * CTL);
     f = pitch(buf + 2u * FS, FS / 2u);
-    check("RELAX: the Original's first pitch, 50.00 Hz (+-0.1)", fabs(f - 50.0) < 0.1);
+    check("voice: 50.00 Hz (+-0.1)", fabs(f - 50.0) < 0.1);
     if (fabs(f - 50.0) >= 0.1)
         printf("  (%.3f Hz)\n", f);
     n = (uint32_t)peak(buf + 2u * FS, FS, 0);
     /* 2 oscillators x 32767 x amp 0.1 x level 1.0 x MASTER 1.0: ~6550 */
-    check("level: two oscillators at amp 0.1 (6000..6600)", n > 6000u && n < 6600u);
-    if (!(n > 6000u && n < 6600u))
-        printf("  (peak %u)\n", n);
+    check("voice: two oscillators at amp 0.1 (6000..6600)", n > 6000u && n < 6600u);
     ok = 1;
     for (i = 1000u; i < FS; i++)                 /* ORIGINAL: the right channel is the left 500 NeXT samples later */
         ok &= buf[2u * (FS + i) + 1u] == buf[2u * (FS + i - 1000u)];
@@ -428,51 +443,240 @@ static void sound(void)
     check("key LEDs off (GLO): dark", !host_led[14 + (55 - 53)]);
     set.leds = 1;
 
-    set.vib_width = 50;                          /* a new start with vibrato and spread: the pitch moves */
-    set.spread = 20;
-    press(B_PLAY);
-    host_render(buf, 4096);
-    check("ENOUGH!: a fade, no click", max_step(buf, 2048) < 600);
-    check("ENOUGH!: the fade takes ~20 ms (still sounding at 10 ms)", peak(buf + 2u * 440u, 64, 0) > 0);
-    check("ENOUGH!: silent within 30 ms", peak(buf + 2u * 1400u, 4096 - 1400u, 0) == 0 &&
-                                              peak(buf + 2u * 1400u, 4096 - 1400u, 1) == 0 && !snd.pub_running);
+    bark_release(0, 1000);                       /* a 1 s T60 fade */
+    host_render(buf, FS / CTL * CTL);
+    check("release: no click", max_step(buf, 4096) < 200);
     got_on = 0;
-    while (host_midi_out(&pkt)) {
-        if ((pkt >> 8 & 0xFFu) == 0x80u && (pkt >> 16 & 0x7Fu) == 31u)
-            got_on |= 1;
-        if ((pkt >> 8 & 0xFFu) == 0xB0u && (pkt >> 16 & 0x7Fu) == 123u)
-            got_on |= 2;
-    }
-    check("ENOUGH!: MIDI note-off of G1 and All Notes Off", got_on == 3u);
+    while (host_midi_out(&pkt))
+        got_on |= (pkt >> 8 & 0xFFu) == 0x80u && (pkt >> 16 & 0x7Fu) == 31u;
+    check("release: MIDI note-off of G1", got_on);
+    host_render(buf, FS / CTL * CTL);
+    check("release: exact silence after the T60 (both channels)", peak(buf + 2u * 2048u, FS / CTL * CTL - 2048u, 0) == 0 &&
+                                                                  peak(buf + 2u * 2048u, FS / CTL * CTL - 2048u, 1) == 0);
+    check("release: the meter and LEDs idle", !snd.pub_meter[0] && !snd.pub_note[0]);
 
-    set.mode = MODE_INTENDED;                    /* voice 1's delay stays 500 in INTENDED too */
-    relax();
-    host_render(buf, 2u * FS / CTL * CTL);
-    check("vibrato and spread: a moving, wider sound", fabs(pitch(buf + 2u * FS, FS / 4u) - 50.0) < 3.0);
+    nt = plain_note(11650);                      /* vibrato: 2 Hz, +-3 Hz around 116.5 */
+    nt.r0c = nt.r1c = 200;
+    nt.a0c = nt.a1c = 300;
+    nt.attack_ms = 200;
+    bark_start(0, &nt);
+    host_render(buf, FS / CTL * CTL);
+    f = pitch(buf + 2u * (FS / 8u - 1024u), 2048);   /* at the top of the vibrato (1/8 s) and at its bottom (3/8 s) */
+    f2 = pitch(buf + 2u * (3u * FS / 8u - 1024u), 2048);
+    check("vibrato: the pitch swings (+3 Hz, then -3 Hz)", f > 118.0 && f2 < 115.0);
+    if (!(f > 118.0 && f2 < 115.0))
+        printf("  (%.2f, %.2f)\n", f, f2);
+    app_audio_stop();                            /* a mode change while voice 2 plays: its delay 500 -> 85, crossfaded */
+    host_render(buf, 1024);
+    nt = plain_note(11650);
+    nt.attack_ms = 100;
+    bark_start(1, &nt);
+    host_render(buf, FS / CTL * CTL);
+    {
+        int32_t before = 0, after = 0;
+        uint32_t k;
+        for (k = FS / 2u; k < FS / CTL * CTL; k++)
+            before = abs(buf[2u * k + 1u] - buf[2u * k - 1u]) > before ? abs(buf[2u * k + 1u] - buf[2u * k - 1u]) : before;
+        set.mode = MODE_INTENDED;
+        host_render(buf, 4096);
+        for (k = 1; k < 4096u; k++)
+            after = abs(buf[2u * k + 1u] - buf[2u * k - 1u]) > after ? abs(buf[2u * k + 1u] - buf[2u * k - 1u]) : after;
+        check("mode change: the right channel's delay crossfades (no jump)", after < before * 6 / 5);
+        if (after >= before * 6 / 5)
+            printf("  (largest step %d, before %d)\n", after, before);
+        set.mode = MODE_ORIGINAL;
+        host_render(buf, 4096);
+    }
+    nt = plain_note(0);                          /* a silent note (0 Hz): silent, the meter idle, no MIDI */
+    drain_midi();
+    bark_start(1, &nt);
     app_audio_stop();
     host_render(buf, 1024);
-    check("app_audio_stop: silent at once, stopped", peak(buf, 1024, 0) == 0 && peak(buf, 1024, 1) == 0 &&
-                                                         !snd.pub_running);
-    set.mode = MODE_ORIGINAL;
+    check("app_audio_stop: silent at once", peak(buf, 1024, 0) == 0 && peak(buf, 1024, 1) == 0);
+    drain_midi();                                /* (the stop's note-off of the vibrato note) */
+    bark_start(1, &nt);
+    host_render(buf, FS / CTL * CTL);
+    check("a 0 Hz note: silent, the meter idle, no MIDI", peak(buf, FS / CTL * CTL, 0) == 0 && !snd.pub_meter[1] &&
+                                                             !host_midi_out(&pkt));
+    app_audio_stop();
+    host_render(buf, 1024);
+}
 
-    set.midi_out = 0;                            /* MIDI OUT off: nothing sent */
+/* the scheduler, driven directly: many wakes, the choices counted */
+#define NWAKES 40000u
+static uint32_t hist[16];
+
+static void sched_run(uint32_t row, uint32_t mode, uint32_t *notes, uint32_t *silent, uint32_t *stray,
+                      uint32_t *first, double *dmin, double *dmax, double *dsum)
+{
+    uint32_t k, last = snd.notes;
+    memset(hist, 0, sizeof hist);
+    set.row = (uint8_t)row;
+    set.mode = (uint8_t)mode;
+    set.spread = 100;
+    *notes = *silent = *stray = *first = 0;
+    *dmin = 1e9;
+    *dmax = -1e9;
+    *dsum = 0;
+    fm1_ms = 4242;
+    snd_relax();
+    for (k = 0; k < NWAKES; k++) {
+        hist[snd.last_sleep / (int32_t)LFS]++;
+        snd_wake();
+        if (snd.notes != last) {
+            const note_t *n = &snd.last;
+            last = snd.notes;
+            (*notes)++;
+            *silent += n->f0c == 0u;
+            *stray += row == 0u && n->f0c == 11650u;   /* the Original reading into morning stuff */
+            *first += n->f0c == LW_PITCH_C[row][0];
+            if (n->f0c) {                        /* the detune, in units of the spread (s at U = 1) */
+                double d = ((double)n->f1c - n->f0c) / (n->f0c * 0.1);
+                *dmin = d < *dmin ? d : *dmin;
+                *dmax = d > *dmax ? d : *dmax;
+                *dsum += d;
+            }
+        }
+    }
+    snd_silence();
+}
+
+static void scheduler(void)
+{
+    uint32_t notes, silent, stray, first, k, ok;
+    double dmin, dmax, dsum;
+    set.vib_rate = VIB_RATE_MAX;
+    set.vib_width = PCT_MAX;
+    sched_run(0, MODE_ORIGINAL, &notes, &silent, &stray, &first, &dmin, &dmax, &dsum);
+    check("sleeps: 2..10 s only", hist[0] == 0u && hist[1] == 0u && hist[11] == 0u);
+    /* ranInt: the ends half as likely: 2 and 10 s 1/16 each, 3..9 s 1/8 */
+    check("sleeps: 2 and 10 s half as often as 3..9 (ranInt)", hist[2] > NWAKES / 20u && hist[2] < NWAKES / 13u &&
+                                                                 hist[6] > NWAKES / 10u && hist[6] < NWAKES / 7u &&
+                                                                 hist[10] > NWAKES / 20u && hist[10] < NWAKES / 13u);
+    /* a note lasts 5..20 s plus a 10..20 s fade; wakes every 6 s: per voice a start every few wakes */
+    /* per voice: 5..20 s on, a 10..20 s fade, then a coin every ~6 s: a note every ~8 wakes */
+    check("notes: the original's density (0.118..0.134 per voice and wake)",
+          notes > NWAKES * NV * 118u / 1000u && notes < NWAKES * NV * 134u / 1000u);
+    printf("  (%u notes in %u wakes)\n", notes, NWAKES);
+    /* ORIGINAL, the Original: index 0..14, the ends half as likely: 50 Hz and the stray 116.5 Hz 1/28 each */
+    check("ORIGINAL: the stray pitch past the row (116.5 Hz) ~1/28", stray > notes / 40u && stray < notes / 20u);
+    check("ORIGINAL: the row's first pitch also ~1/28 (an end)", first > notes / 40u && first < notes / 20u);
+    check("ORIGINAL: the lopsided detune, -s/2 .. +3s/2", dmin >= -0.51 && dmin < -0.3 && dmax > 1.2 &&
+                                                            dmax <= 1.51 && dsum / notes > 0.15);
+    printf("  (detune %.2f .. %.2f, mean %.2f)\n", dmin, dmax, dsum / notes);
+    sched_run(0, MODE_INTENDED, &notes, &silent, &stray, &first, &dmin, &dmax, &dsum);
+    check("INTENDED: no stray pitch, the first 1/14", stray == 0u && first > notes / 17u && first < notes / 11u);
+    check("INTENDED: the even detune, -s .. +s", dmin >= -1.01 && dmin < -0.8 && dmax > 0.8 && dmax <= 1.01 &&
+                                                   fabs(dsum / notes) < 0.05);
+    sched_run(4, MODE_ORIGINAL, &notes, &silent, &stray, &first, &dmin, &dmax, &dsum);
+    check("ORIGINAL, Bach: past the table, a silent note ~1/28", silent > notes / 40u && silent < notes / 20u);
+    sched_run(1, MODE_ORIGINAL, &notes, &silent, &stray, &first, &dmin, &dmax, &dsum);
+    check("ORIGINAL, morning stuff: its 0.0 entry, silent ~1/22", silent > notes / 30u && silent < notes / 16u);
+    sched_run(1, MODE_INTENDED, &notes, &silent, &stray, &first, &dmin, &dmax, &dsum);
+    check("INTENDED, morning stuff: never silent", silent == 0u);
+    sched_run(3, MODE_INTENDED, &notes, &silent, &stray, &first, &dmin, &dmax, &dsum);
+    check("INTENDED, Schoenberg: never silent", silent == 0u);
+
+    /* the timbre set: ORIGINAL keeps the one loaded at RELAX, INTENDED follows the row */
+    set.row = 0;
+    set.mode = MODE_ORIGINAL;
+    fm1_ms = 777;
+    snd_relax();
+    set.row = 3;                                 /* Schoenberg: set 2 */
+    for (k = 0, ok = 1; k < 200u; k++) {
+        uint32_t before = snd.notes;
+        snd_wake();
+        if (snd.notes != before)
+            ok &= snd.last.set == 0u;
+    }
+    check("ORIGINAL: a row change keeps the timbre set until RELAX", ok);
+    set.mode = MODE_INTENDED;
+    for (k = 0, ok = 1; k < 200u; k++) {
+        uint32_t before = snd.notes;
+        snd_wake();
+        if (snd.notes != before)
+            ok &= snd.last.set == 2u;
+    }
+    check("INTENDED: the timbre set follows the row", ok);
+    {   /* the vibrato and the note's values inside the original's ranges */
+        uint32_t lim_ok = 1, waves = 0;
+        for (k = 0; k < 2000u; k++) {
+            uint32_t before = snd.notes;
+            snd_wake();
+            if (snd.notes != before) {
+                const note_t *n = &snd.last;
+                lim_ok &= n->r0c <= 1000u && n->r1c <= 1000u && n->a0c <= n->f0c / 10u + 1u &&
+                          n->a1c <= n->f0c / 10u + 1u && n->amp >= (uint32_t)ENV_ONE / 20u &&
+                          n->amp <= (uint32_t)ENV_ONE / 10u && n->attack_ms >= 10000u && n->attack_ms <= 20000u &&
+                          n->wave < LW_WAVES;
+                waves |= 1u << n->wave;
+            }
+        }
+        check("notes: vibrato, amp, attack and wave within the original's ranges", lim_ok);
+        check("notes: all seven waves come up", waves == 0x7Fu);
+    }
+    snd_silence();
+}
+
+/* the whole: RELAX, a long listen through the ISR, a mode change, ENOUGH! */
+static void looching(void)
+{
+    uint32_t s, ok, notes0 = snd.notes;
+    int32_t pk = 0, st = 0;
+    set.row = 0;
+    set.mode = MODE_ORIGINAL;
+    set.vib_rate = 10;
+    set.vib_width = set.spread = 10;
+    fm1_ms = 31337;
+    relax();
+    for (s = 0; s < 60u; s++) {                  /* a minute, a second at a time */
+        host_render(buf, FS / CTL * CTL);
+        pk = peak(buf, FS / CTL * CTL, 0) > pk ? peak(buf, FS / CTL * CTL, 0) : pk;
+        st = max_step(buf, FS / CTL * CTL) > st ? max_step(buf, FS / CTL * CTL) : st;
+    }
+    check("a minute of looching: notes started", snd.notes - notes0 >= 4u);
+    printf("  (%u notes, peak %d, largest step %d)\n", snd.notes - notes0, pk, st);
+    check("a minute of looching: it sounds, below full scale", pk > 1000 && pk < 30000);
+    check("a minute of looching: no clicks (largest step < 1500)", st < 1500);
+    ok = 1;
+    for (s = 1000u; s < FS / CTL * CTL; s++)     /* ORIGINAL: every voice delayed 500: the whole right = left later */
+        if (buf[2u * s + 1u] != buf[2u * (s - 1000u)]) {
+            if (ok)
+                printf("  (frame %u: R %d, L-1000 %d)\n", s, buf[2u * s + 1u], buf[2u * (s - 1000u)]);
+            ok = 0;
+        }
+    check("ORIGINAL, four voices: right = left delayed 500 samples", ok);
+    host_turn(EN_ALGO, 1);                       /* INTENDED while playing: the delays crossfade */
+    host_frame();
+    host_render(buf, FS / CTL * CTL);
+    check("INTENDED while playing: the delays crossfade (no click)", max_step(buf, FS / CTL * CTL) < 1500);
+    ok = 1;
+    for (s = 1000u; s < FS / CTL * CTL; s++)
+        ok &= buf[2u * s + 1u] == buf[2u * (s - 1000u)];
+    check("INTENDED: the right channel no longer one 500-sample delay", !ok || !snd.v[1].env);
+    drain_midi();                                /* (a minute of notes overfills the 64-event ring) */
+    enough();
+    check("ENOUGH!: a fade, no click", max_step(buf, 2048) < 1500);
+    check("ENOUGH!: silent within 30 ms, stopped", peak(buf + 2u * 1400u, 4096 - 1400u, 0) == 0 &&
+                                                       peak(buf + 2u * 1400u, 4096 - 1400u, 1) == 0 && !snd.pub_running);
+    {
+        uint32_t pkt, got = 0;
+        while (host_midi_out(&pkt))
+            got |= (pkt >> 8 & 0xFFu) == 0xB0u && (pkt >> 16 & 0x7Fu) == 123u;
+        check("ENOUGH!: All Notes Off", got);
+    }
+    set.mode = MODE_ORIGINAL;
+    set.midi_out = 0;                            /* MIDI OUT off: a note starts, nothing is sent */
     drain_midi();
     relax();
-    host_render(buf, 1024);
-    check("MIDI OUT off: nothing sent", !host_midi_out(&pkt));
+    snd_note(0);
+    {
+        uint32_t pkt;
+        check("MIDI OUT off: nothing sent", !host_midi_out(&pkt) && snd.v[0].playing);
+    }
     app_audio_stop();
     host_render(buf, 1024);
     set.midi_out = 1;
-
-    set.row = 1;                                 /* every row's first pitch: morning stuff 116.5 Hz */
-    set.vib_width = set.spread = 0;
-    relax();
-    host_render(buf, 3u * FS / CTL * CTL);
-    f = pitch(buf + 2u * 2u * FS, FS / 2u);
-    check("morning stuff: 116.50 Hz (+-0.2)", fabs(f - 116.5) < 0.2);
-    app_audio_stop();
-    host_render(buf, 1024);
-    set.row = 0;
 }
 
 int main(void)
@@ -481,7 +685,9 @@ int main(void)
         return 1;
     screen();
     persistence();
-    sound();
+    voice();
+    scheduler();
+    looching();
     puts(failed ? "APP TEST FAILED" : "app test passed");
     return failed ? 1 : 0;
 }
