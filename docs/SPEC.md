@@ -201,8 +201,6 @@ What is said (`speak.c`, fm1-reader's RULES.md: full words, no symbols, the impo
 - What the NeXT read past the end of the Bach row (assumed silent: the bytes after the table are small integers).
 - The upsampling filter: linear interpolation first; a short half-band filter if the images are audible.
 
-- The licence of the original's data and icon (`assets/looching/`): Brad Garton is a co-author here; confirm with Brad Garton
-  that they may be published under GPL-3.0-only before the repository or a package goes public.
 
 ## Out of scope for v1 (planned extras)
 
@@ -214,6 +212,8 @@ What is said (`speak.c`, fm1-reader's RULES.md: full words, no symbols, the impo
 - The original's help pages.
 
 ## Notes from the build
+
+- The original's data and icon (`assets/looching/`) are GPL-3.0-only with the rest: Brad Garton agreed (2026-11-26).
 
 - The skeleton (milestone 1) is built: `firmware/app/{data,sound,ui}.c`, the data generated from the original files
   in `assets/looching/` by `tools/gen_looch.py` (the TIFF is a NeXT 2-bit grey + alpha, planar: read by hand).
