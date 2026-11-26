@@ -13,7 +13,7 @@
 #define APP_NAME "LOOCHING 2026"
 #endif
 #ifndef APP_VERSION
-#define APP_VERSION "v0.1"       /* build.py --release X.Y */
+#define APP_VERSION "dev"        /* build.py --release X.Y: "vX.Y" (shown at power-on, told to the screen reader) */
 #endif
 #define APP_ID 0xBD58C3F7u       /* this app's records in the store (store.c): every app its own (setup/new_project.py
                                   * draws one), so another firmware's data in the same flash reads as empty */

@@ -12,7 +12,8 @@ synthesizer: four slow wavetable voices on a lazy random scheduler, with the ori
 
 ![The three pages: MAIN with four voices sounding, Preferences, Info](docs/images/pages.png)
 
-Version 0.1. It runs on a real FM-1. What it does, in full: [docs/SPEC.md](docs/SPEC.md).
+Version 1.0 ([release](https://github.com/rev3rend/looching2026/releases/tag/v1.0): `looching2026-1.0.fwsc`). It runs
+on a real FM-1. What it does, in full: [docs/SPEC.md](docs/SPEC.md).
 
 ## What it does
 
@@ -75,14 +76,16 @@ There is no MIDI in. Details: [docs/SPEC.md](docs/SPEC.md#midi).
 
 ## Installing
 
-On an FM-1 connected by USB, from a checkout with a build (below):
+Download `looching2026-1.0.fwsc` from the [release](https://github.com/rev3rend/looching2026/releases/tag/v1.0)
+(check it against `SHA256SUMS`), connect the FM-1 by USB and, from a checkout of this repository:
 
 ```sh
-python3 tools/fm1_install.py build/firmware.fwsc   # needs mido and python-rtmidi
+python3 tools/fm1_install.py looching2026-1.0.fwsc   # needs mido and python-rtmidi
 ```
 
-or with the web installer (Chrome or Edge): `python3 web/make_site.py build/firmware.fwsc dev build/site`, serve
-`build/site` and open `/webapp/installer/`. Read [Safety](#safety) first.
+or with the web installer (Chrome or Edge): `python3 web/make_site.py looching2026-1.0.fwsc v1.0 build/site`, serve
+`build/site` and open `/webapp/installer/`. At power-on the bottom line shows `LOOCHING 2026 v1.0`. A build of your
+own is `build/firmware.fwsc`. Read [Safety](#safety) first.
 
 ## Build and test
 

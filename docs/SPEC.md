@@ -1,6 +1,6 @@
 # Looching 2026: specification
 
-Version 0.1 (skeleton) · R. Luke DuBois and Brad Garton
+Version 1.0 · R. Luke DuBois and Brad Garton
 
 ## What it is
 
@@ -72,7 +72,7 @@ LEVEL. Below, a one-line explanation of the current mode.
 ### INFO
 
 The original's Info panel: the dog icon, `Looching`, `from Brad Garton`, `(relaxing sounds)`, `(this is not the
-Looch)`, a bevelled button reading `Living or dead, that's the big question`, and below: `FM-1 version 0.1`,
+Looch)`, a bevelled button reading `Living or dead, that's the big question`, and below: `FM-1 version 1.0` (the build's version),
 `R. Luke DuBois and Brad Garton`, `after Looching 2.0 for NeXT, 1991`. (The original's help text quoted John
 Ashbery's *Three Poems*; it stays out.)
 
@@ -175,7 +175,7 @@ app or damaged, values clamped); written by SAVE. It does not autostart: it alwa
 The FM-1 speaks through the fm1-reader screen reader (https://github.com/charlesvestal/fm1-reader, protocol
 version 1), as Solinaesque does (`sr.c` is Solinaesque's, unchanged): USB-MIDI SysEx `F0 7D 53 52 <cmd> ... F7`;
 silent until a reader's HELLO (every 2 s; silent again 5 s after the last, or on BYE); the HELLO answer names the
-firmware ("LOOCHING 2026 v0.1", an empty words link: the device speaks in full words); SAY messages (ASCII, at most
+firmware ("LOOCHING 2026 v1.0", an empty words link: the device speaks in full words); SAY messages (ASCII, at most
 160 characters) with NOW for what the player caused and KEEP for warnings; WHERE (and the first HELLO) reads the
 whole page. Never blocks: a message the USB queue has no room for is dropped. The platform's main loop calls the
 app's `app_sysex()` before the update entry; it takes only frames starting 7D 53 52.
@@ -213,6 +213,8 @@ What is said (`speak.c`, fm1-reader's RULES.md: full words, no symbols, the impo
 
 ## Notes from the build
 
+- Version 1.0 released 2026-11-26 (`./build.sh --release 1.0`: `looching2026-1.0.fwsc`, `-app.bin`, `SHA256SUMS`;
+  everyday builds say `dev`). The public emulator is the release's (`EMU_VERSION=v1.0 sh web/emu/build.sh`).
 - The original's data and icon (`assets/looching/`) are GPL-3.0-only with the rest: Brad Garton agreed (2026-11-26).
 
 - The skeleton (milestone 1) is built: `firmware/app/{data,sound,ui}.c`, the data generated from the original files
