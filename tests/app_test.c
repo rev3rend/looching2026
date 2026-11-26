@@ -66,18 +66,23 @@ static void screen(void)
     host_boot();
     host_frame();
     check("boot: MAIN page", ui.page == PG_MAIN);
-    check("boot: the black title bar with the name in white", count(0, 0, 240, 36, NX_BLACK) > 4000u &&
-                                                                  bright(0, 0, 240, 36) > 800u);
-    {   /* the large face is sparse (tools/gen_aa_font.py L_CHARS): a character it lacks draws as a space */
+    check("boot: the name band, white on dark grey like the status strip", count(0, 0, 240, BAND_H, NX_DARK) > 3000u &&
+                                                                              bright(0, 0, 240, BAND_H) > 100u &&
+                                                                              count(0, 0, 240, BAND_H, NX_BLACK) == 0u);
+    check("boot: the band as tall as the status strip", host_fb[(BAND_H - 1u) * 240u + 2u] == NX_DARK &&
+                                                         host_fb[BAND_H * 240u + 2u] == NX_LIGHT &&
+                                                         host_fb[(240u - BAND_H) * 240u + 2u] == NX_DARK &&
+                                                         host_fb[(239u - BAND_H) * 240u + 2u] != NX_DARK);
+    {   /* the band's font has every character of the name (a missing glyph draws as a space) */
         const char *c = APP_NAME;
         int all = 1;
         for (; *c; c++)
-            all &= glyph_at(&AF_L, (uint8_t)*c) >= 0;
-        check("boot: every character of APP_NAME is in the large font", all);
+            all &= glyph_at(&AF_S, (uint8_t)*c) >= 0;
+        check("boot: every character of APP_NAME is in the small font", all);
     }
-    check("boot: the dog icon drawn (black outline, white face)", count(8, 40, 56, 88, NX_BLACK) > 150u &&
-                                                                  count(8, 40, 56, 88, NX_WHITE) > 300u);
-    check("boot: RELAX raised (light face), stopped", !snd.pub_running && count(70, 46, 230, 82, NX_DARK) < 400u);
+    check("boot: the dog icon drawn (black outline, white face)", count(8, TOP_Y + 4, 56, TOP_Y + 52, NX_BLACK) > 150u &&
+                                                                  count(8, TOP_Y + 4, 56, TOP_Y + 52, NX_WHITE) > 300u);
+    check("boot: RELAX raised (light face), stopped", !snd.pub_running && count(70, TOP_Y + 10, 230, TOP_Y + 46, NX_DARK) < 400u);
     check("boot: the name and version in the status strip", ui.msg && bright(0, 222, 240, 240) > 100u);
     host_png("build/shots/main.png");
     host_frame();
@@ -92,17 +97,17 @@ static void screen(void)
         host_render(b, 64);
     }
     frames(1);
-    check("PLAY: ENOUGH! drawn pressed (dark face)", snd.pub_running && count(70, 46, 230, 82, NX_DARK) > 3000u);
+    check("PLAY: ENOUGH! drawn pressed (dark face)", snd.pub_running && count(70, TOP_Y + 10, 230, TOP_Y + 46, NX_DARK) > 3000u);
     check("PLAY: its LED lit", host_led[panel.btn[B_PLAY]]);
     host_png("build/shots/main_running.png");
     press(B_PLAY);
     check("PLAY again: ENOUGH! -> stop requested", snd.run_req == 2u);
 
-    n0 = count(4, 92 + 2 + 16 + 4, 16, 92 + 2 + 16 + 12, NX_BLACK);
+    n0 = count(4, MID_Y + 2 + 16 + 4, 16, MID_Y + 2 + 16 + 12, NX_BLACK);
     host_turn(EN_PRESET, 1);
     host_frame();
     check("PRESETS: the next tone row (morning stuff)", set.row == 1u);
-    check("PRESETS: its radio button filled", count(4, 92 + 2 + 16 + 4, 16, 92 + 2 + 16 + 12, NX_BLACK) > n0);
+    check("PRESETS: its radio button filled", count(4, MID_Y + 2 + 16 + 4, 16, MID_Y + 2 + 16 + 12, NX_BLACK) > n0);
     host_turn(EN_PRESET, 99);
     host_frame();
     check("PRESETS: clamped at Bach", set.row == 4u);
@@ -178,7 +183,7 @@ static void screen(void)
     memset(host_fb, 0, sizeof host_fb);          /* the platform drew over the screen (UBOOT countdown) */
     app_redraw = 1;
     host_frame();
-    check("app_redraw: the whole screen drawn again", count(0, 0, 240, 36, NX_BLACK) > 4000u && !app_redraw);
+    check("app_redraw: the whole screen drawn again", count(0, 0, 240, BAND_H, NX_DARK) > 3000u && !app_redraw);
 
     /* everything at its widest: the longest note, the biggest values, four voices with five-digit frequencies */
     set.vib_rate = VIB_RATE_MAX;

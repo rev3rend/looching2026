@@ -89,7 +89,18 @@ static void nx_dog(int32_t x, int32_t y)         /* the LoochityDog icon (tools/
         }
 }
 
-static void draw_title(const aafont_t *f, const char *s)   /* the black title bar, 36 px */
+#define BAND_H 18                /* MAIN's name band and the status strip: the same small band, top and bottom */
+#define TOP_Y 24                 /* MAIN: the dog and RELAX / ENOUGH! (24..82) */
+#define MID_Y 88                 /* MAIN: the tone rows and the sliders (88..172) */
+
+static void draw_band(void)                      /* MAIN's name: small, white on dark grey, as the status strip */
+{
+    cv_begin(240, BAND_H, NX_DARK);
+    cv_text_in(0, 1, 240, &AF_S, APP_NAME, NX_WHITE, NX_DARK);
+    cv_blit(0, 0);
+}
+
+static void draw_title(const aafont_t *f, const char *s)   /* GLO, INFO: the black title bar, 36 px */
 {
     cv_begin(240, 36, NX_BLACK);
     cv_text_in(0, (36 - (int32_t)f->h) / 2 + (f == &AF_L ? 1 : 0), 240, f, s, NX_WHITE, NX_BLACK);
@@ -97,7 +108,7 @@ static void draw_title(const aafont_t *f, const char *s)   /* the black title ba
 }
 
 /* MAIN ---------------------------------------------------------------------- */
-static void draw_main_top(void)                  /* y 36..92: the dog, RELAX / ENOUGH! */
+static void draw_main_top(void)                  /* y 24..82: the dog, RELAX / ENOUGH! */
 {
     int on = snd.pub_running;
     cv_begin(240, 56, NX_LIGHT);
@@ -105,7 +116,7 @@ static void draw_main_top(void)                  /* y 36..92: the dog, RELAX / E
     nx_bevel(68, 8, 164, 40, on);
     cv_text_in(68, 8 + (40 - (int32_t)AF_M.h) / 2, 164, &AF_M, on ? "ENOUGH!" : "RELAX", on ? NX_WHITE : NX_BLACK,
                on ? NX_DARK : NX_LIGHT);
-    cv_blit(0, 36);
+    cv_blit(0, TOP_Y);
 }
 
 static void draw_slider(int32_t x, int32_t y, int32_t w, const char *label, const char *val, uint32_t v, uint32_t max)
@@ -118,7 +129,7 @@ static void draw_slider(int32_t x, int32_t y, int32_t w, const char *label, cons
     nx_bevel(kx, y + 15, kw, 11, 0);             /* the knob */
 }
 
-static void draw_main_mid(void)                  /* y 92..176: the tone rows, the three sliders */
+static void draw_main_mid(void)                  /* y 88..172: the tone rows, the three sliders */
 {
     char b[16];
     uint32_t i;
@@ -137,7 +148,7 @@ static void draw_main_mid(void)                  /* y 92..176: the tone rows, th
     draw_slider(122, 28, 114, "VIB WIDTH", b, set.vib_width, PCT_MAX);
     fmt_pct(b, set.spread);
     draw_slider(122, 56, 114, "SPREAD", b, set.spread, PCT_MAX);
-    cv_blit(0, 92);
+    cv_blit(0, MID_Y);
 }
 
 static void draw_main_meters(void)               /* y 176..222: the four voices */
@@ -296,7 +307,7 @@ static void ui_draw(void)                        /* every area whose signature c
             ui.sig[a] = ~sig_area(a);
         lcd_fill(0, 0, 240, 240, NX_LIGHT);
         if (ui.page == PG_MAIN)
-            draw_title(&AF_L, APP_NAME);
+            draw_band();
         else
             draw_title(&AF_M, ui.page == PG_GLO ? "Preferences" : "Info");
     }

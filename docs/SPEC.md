@@ -54,7 +54,7 @@ signature per screen, redrawn only on change); the voice meters update at most a
 
 ### MAIN (the Looching window)
 
-- Title bar: `LOOCHING 2026` (large font).
+- Top band: `LOOCHING 2026` in the small font, white on dark grey, 18 px: the same band as the status strip.
 - Top left: the LoochityDog icon (48 × 48, 2-bit grey, converted from the original's `LoochityDog.tiff`).
 - Top right: the RELAX / ENOUGH! button, bevelled, drawn pressed while running.
 - Left: the five tone rows as radio buttons, the current one filled.
