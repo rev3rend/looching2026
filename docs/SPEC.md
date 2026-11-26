@@ -147,7 +147,49 @@ app or damaged, values clamped); written by SAVE. It does not autostart: it alwa
 - Out over USB (MIDI OUT on): each voice on its own channel (voice 1..4: channels 1..4). Note start: pitch bend to the
   exact frequency (±2 semitones), then note-on at the nearest note, velocity from amp (0.05..0.10 → 64..127). Release
   start: note-off. Silent (0 Hz) notes send nothing. ENOUGH! sends note-offs for sounding voices and All Notes Off.
+- **The panel out** (USB, MIDI OUT on; `firmware/app/ctl.c`): every control the player changes, on channel 1, so a
+  DAW can record it and MIDItoSpeech can say it. Nothing at power-on; changes made while MIDI OUT is off are not sent
+  later. The main loop queues, the audio ISR sends after its notes (MIDI out from one context).
+
+  | Message | Control | Value |
+  | --- | --- | --- |
+  | CC 7 | LEVEL | level x 127 / 100 |
+  | NRPN 0:76 (CC 99 0, 98 76, 6 MSB, 38 LSB) | VIB RATE | step x 16383 / 200 (201 steps: 14-bit) |
+  | CC 77 | VIB WIDTH | step x 127 / 100 |
+  | CC 78 | SPREAD | step x 127 / 100 |
+  | CC 80 | MODE | 0 ORIGINAL, 127 INTENDED |
+  | CC 81 | KEY LEDS | 0 off, 127 on |
+  | CC 109 | RELAX / ENOUGH! | 127 looching, 0 stopped |
+  | Program Change 0..4 | tone row | the row |
+
+- **MIDItoSpeech sidecar** (`docs/synthaccess/Looching2026.json`, for IDM NYU's synthaccess): generated from the
+  firmware's map (`tools/gen_synthaccess.c`) and checked by the suite: every value sent (515) reads exactly as the
+  screen shows it (`tests/synthaccess_check.py`, MIDItoSpeech's parser modes: percent, floatmap with the screen's
+  decimals, enumsplit, offon, the rows as presets).
 - In: none (TRS MIDI IN off by default; incoming messages are ignored).
+
+## Accessibility: the screen reader (fm1-reader)
+
+The FM-1 speaks through the fm1-reader screen reader (https://github.com/charlesvestal/fm1-reader, protocol
+version 1), as Solinaesque does (`sr.c` is Solinaesque's, unchanged): USB-MIDI SysEx `F0 7D 53 52 <cmd> ... F7`;
+silent until a reader's HELLO (every 2 s; silent again 5 s after the last, or on BYE); the HELLO answer names the
+firmware ("LOOCHING 2026 v0.1", an empty words link: the device speaks in full words); SAY messages (ASCII, at most
+160 characters) with NOW for what the player caused and KEEP for warnings; WHERE (and the first HELLO) reads the
+whole page. Never blocks: a message the USB queue has no room for is dropped. The platform's main loop calls the
+app's `app_sysex()` before the update entry; it takes only frames starting 7D 53 52.
+
+What is said (`speak.c`, fm1-reader's RULES.md: full words, no symbols, the important thing first):
+
+- A page, in full: MAIN "looching, stopped. tone row, the Original. vibrato rate 0.50 hertz, vibrato width 1.0
+  percent, spread 1.0 percent. original mode, level 80 percent. no voices sounding." (or "voices sounding: 114.0
+  hertz, 266.6 hertz."); GLO "preferences. mode original, MIDI out on, key lights on, level 80 percent. original:
+  what the NeXT did. ..."; INFO the Info panel in words.
+- RELAX / ENOUGH! at once: "relax, looching", "enough, stopped".
+- A control when it settles (120 ms still, at least every ~half second while turning): "vibrato rate 0.55 hertz",
+  "tone row, Schoenberg", "intended mode", "level 75 percent", "MIDI out off", "key lights on".
+- On MAIN, each note a voice starts, queued so it never cuts the player off: "voice 3, 266.6 hertz" (silent notes
+  are not said).
+- The status strip's notes: "saved", "coming soon, density", "defaults, not saved"; "save failed" as a warning.
 
 ## Open questions
 

@@ -1,0 +1,63 @@
+{
+  "device": {
+    "name": "Looching 2026",
+    "manufacturer": "R. Luke DuBois and Brad Garton (custom firmware for the M-VAVE FM-1)",
+    "language": "en-US",
+    "version": 1,
+    "program_change": {
+      "0": {
+        "label": "tone row",
+        "data": "enum",
+        "enum": "presets"
+      }
+    },
+    "CC": {
+      "7": {
+        "label": "level",
+        "data": "percent"
+      },
+      "77": {
+        "label": "vibrato width limit",
+        "data": "floatmap",
+        "map": [0, 127, 0, 10],
+        "clamp": "true",
+        "precision": 1,
+        "suffix": "percent"
+      },
+      "78": {
+        "label": "frequency spread",
+        "data": "floatmap",
+        "map": [0, 127, 0, 10],
+        "clamp": "true",
+        "precision": 1,
+        "suffix": "percent"
+      },
+      "80": {
+        "label": "mode",
+        "data": "enumsplit",
+        "split": [0, 64],
+        "enum": ["original", "intended"]
+      },
+      "81": {
+        "label": "key lights",
+        "data": "offon"
+      },
+      "109": {
+        "label": "looching",
+        "data": "offon"
+      }
+    },
+    "NRPN": {
+      "76": {
+        "label": "vibrato rate limit",
+        "hires": "true",
+        "data": "floatmap",
+        "map": [0, 16383, 0, 10],
+        "clamp": "true",
+        "precision": 2,
+        "suffix": "hertz"
+      }
+    },
+    "presets": ["the Original", "morning stuff", "the Big Drone", "Schoenberg", "Bach"]
+  }
+}

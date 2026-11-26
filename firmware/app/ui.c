@@ -162,7 +162,7 @@ static void draw_main_meters(void)               /* y 176..222: the four voices 
         if (m)
             cv_rect(x + 1, 7, 1 + (int32_t)((uint32_t)(w - 3) * m / 255u), 10, NX_WHITE);
         if (fc) {
-            fmt_fix(b, (int32_t)(fc / 10u), 1);  /* Hz to one decimal */
+            fmt_dec(b, (int32_t)(fc / 10u), 1);  /* Hz to one decimal */
         } else
             str_cpy(b, "--", sizeof b);
         cv_text_in(x, 22, w, &AF_S, b, NX_BLACK, NX_LIGHT);

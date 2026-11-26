@@ -75,19 +75,26 @@ static void data_load(void)                      /* defaults, then the record ov
 
 static int data_save(void) { return store_save(SET_SLOT, APP_ID, &set, sizeof set); }   /* 0 = saved */
 
+/* a fixed-point number with its leading zero ("0.50", "0.5": the platform's fmt_fix writes ".50") */
+static void fmt_dec(char *b, int32_t v, int decimals)
+{
+    int32_t one = decimals == 1 ? 10 : decimals == 2 ? 100 : 1;
+    if (decimals && v >= 0 && v < one) {
+        b[0] = '0';
+        fmt_fix(b + 1, v, decimals);
+    } else
+        fmt_fix(b, v, decimals);
+}
+
 /* the three slider values as text ("0.50 Hz", "1.0 %") */
 static void fmt_rate(char *b, uint32_t v)        /* 0.05 Hz steps -> "x.xx Hz" */
 {
-    if (v < 20u) {                               /* fmt_fix writes ".50": the leading 0 */
-        b[0] = '0';
-        fmt_fix(b + 1, (int32_t)v * 5, 2);
-    } else
-        fmt_fix(b, (int32_t)v * 5, 2);
+    fmt_dec(b, (int32_t)v * 5, 2);
     str_cpy(b + str_len(b), " Hz", 8);
 }
 
 static void fmt_pct(char *b, uint32_t v)         /* 0.1 % steps -> "x.x %" */
 {
-    fmt_fix(b, (int32_t)v, 1);
+    fmt_dec(b, (int32_t)v, 1);
     str_cpy(b + str_len(b), " %", 8);
 }

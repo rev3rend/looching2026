@@ -67,6 +67,8 @@ static struct {
     volatile uint32_t pub_f0c[NV];        /* its base frequency, centi-Hz */
 } snd;
 
+static void ctl_drain(void);                     /* (ctl.c: the panel's MIDI out, sent from here after the notes) */
+
 static int16_t snd_dly[NV][DLY_N] __attribute__((section(".pool")));   /* zero at boot: silence */
 
 static const uint16_t DLY_ORIGINAL[NV] = {500, 500, 500, 500};   /* Bark.m's counter i never advanced */
@@ -351,6 +353,7 @@ static void app_audio(int32_t *out, uint32_t n)
     while (midi_in_take(&pkt, 0))                /* no MIDI in (docs/SPEC.md): drained so the ring never fills */
         ;
     snd_requests();
+    ctl_drain();
     for (i = 0; i < LCTL; i++)
         l[i] = r[i] = 0;
     for (j = 0; j < NV; j++) {

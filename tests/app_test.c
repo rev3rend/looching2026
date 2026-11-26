@@ -131,6 +131,12 @@ static void screen(void)
     host_frame();
     check("KNOB 1 clamped at 10.00 Hz, KNOB 2 at 0.0 %", set.vib_rate == VIB_RATE_MAX && set.vib_width == 0u);
 
+    {   /* the values below 1 with their leading zero (the platform's fmt_fix writes ".5") */
+        char b[16], c[16];
+        fmt_pct(b, 5);
+        fmt_rate(c, 1);
+        check("values below 1: \"0.5 %\", \"0.05 Hz\" (the leading zero)", str_eq(b, "0.5 %") && str_eq(c, "0.05 Hz"));
+    }
     host_turn(EN_ALGO, 1);
     host_frame();
     check("ALGORITHM clockwise: INTENDED", set.mode == MODE_INTENDED);
@@ -251,6 +257,9 @@ static void power_cycle(void)                    /* the app's RAM gone, the flas
     ui.master_q8 = 256;
     memset(&snd, 0, sizeof snd);
     memset(snd_dly, 0, sizeof snd_dly);          /* (.pool is zeroed at boot) */
+    memset(&ctl, 0, sizeof ctl);
+    memset(&sr, 0, sizeof sr);
+    memset(&sk, 0, sizeof sk);
     host_boot();
     host_frame();
 }
@@ -692,6 +701,325 @@ static void looching(void)
     set.midi_out = 1;
 }
 
+/* ---------------------------------------------------------------- the panel's MIDI out (ctl.c) --- */
+static uint32_t mo[64], mo_n;
+
+static void mo_take(void)                        /* render a block (the ISR sends the queue), collect what went out */
+{
+    uint32_t pkt;
+    host_render(buf, CTL);
+    mo_n = 0;
+    while (host_midi_out(&pkt))
+        if (mo_n < 64u)
+            mo[mo_n++] = pkt >> 8;               /* status | d1 << 8 | d2 << 16 */
+}
+
+static int mo_has(uint32_t status, uint32_t d1, int32_t d2)   /* d2 < 0: any */
+{
+    uint32_t i;
+    for (i = 0; i < mo_n; i++)
+        if ((mo[i] & 0xFFu) == status && (mo[i] >> 8 & 0x7Fu) == d1 && (d2 < 0 || (mo[i] >> 16 & 0x7Fu) == (uint32_t)d2))
+            return 1;
+    return 0;
+}
+
+static void midi_ctl(void)
+{
+    uint32_t i, ok;
+    host_nor_erase();
+    power_cycle();
+    drain_midi();                                /* (the tests before left packets in the ring) */
+    frames(2);
+    mo_take();
+    check("MIDI out: nothing at power-on", mo_n == 0u);
+    host_turn(EN_K2, 5);                         /* VIB WIDTH 1.0 -> 1.5 %: CC 77, 15 x 127 / 100 = 19 */
+    host_frame();
+    mo_take();
+    check("KNOB 2: CC 77 = 19 (1.5 %) on channel 1", mo_n == 1u && mo_has(0xB0, 77, 19));
+    host_turn(EN_K3, 90);                        /* SPREAD -> 10.0 %: CC 78 = 127 */
+    host_turn(EN_K4, 20);                        /* LEVEL 80 -> 100 %: CC 7 = 127 */
+    host_frame();
+    mo_take();
+    check("KNOB 3, KNOB 4: CC 78 = 127, CC 7 = 127", mo_has(0xB0, 78, 127) && mo_has(0xB0, 7, 127));
+    host_turn(EN_K1, 1);                         /* VIB RATE 0.50 -> 0.55 Hz: NRPN 0:76 = 11 x 16383 / 200 = 901 */
+    host_frame();
+    mo_take();
+    check("KNOB 1: NRPN 0:76 = 901 (0.55 Hz), CC 99 98 6 38 in order",
+          mo_n == 4u && mo[0] == (0xB0u | 99u << 8 | 0u << 16) && mo[1] == (0xB0u | 98u << 8 | 76u << 16) &&
+              mo[2] == (0xB0u | 6u << 8 | (901u >> 7) << 16) && mo[3] == (0xB0u | 38u << 8 | (901u & 127u) << 16));
+    host_turn(EN_PRESET, 3);
+    host_frame();
+    mo_take();
+    check("PRESETS: Program Change 3 (Schoenberg)", mo_has(0xC0, 3, -1));
+    host_turn(EN_ALGO, 1);
+    host_frame();
+    mo_take();
+    check("ALGORITHM: CC 80 = 127 (INTENDED)", mo_has(0xB0, 80, 127));
+    press(B_GLO);
+    host_turn(EN_K3, -1);
+    host_frame();
+    mo_take();
+    check("GLO KEY LEDS off: CC 81 = 0", mo_has(0xB0, 81, 0));
+    press(B_HOME);
+    press(B_PLAY);
+    host_render(buf, CTL);                       /* the ISR takes RELAX */
+    host_frame();
+    mo_take();
+    check("RELAX: CC 109 = 127", mo_has(0xB0, 109, 127));
+    press(B_PLAY);
+    host_render(buf, 4096);                      /* the fade, stopped */
+    host_frame();
+    mo_take();
+    check("ENOUGH!: CC 109 = 0", mo_has(0xB0, 109, 0));
+    press(B_GLO);
+    host_turn(EN_K2, -1);                        /* MIDI OUT off */
+    host_frame();
+    mo_take();
+    press(B_HOME);
+    host_turn(EN_K2, -5);
+    host_turn(EN_PRESET, -1);
+    host_frame();
+    mo_take();
+    check("MIDI OUT off: nothing sent", mo_n == 0u);
+    press(B_GLO);
+    host_turn(EN_K2, 1);                         /* MIDI OUT on again: what changed meanwhile is not sent */
+    host_frame();
+    mo_take();
+    check("MIDI OUT on again: the changes made while off are not sent", mo_n == 0u);
+    press(B_HOME);
+    for (i = 0, ok = 1; i <= VIB_RATE_MAX; i++)  /* every rate step a distinct 14-bit value, both ends exact */
+        ok &= ctl_value(C_RATE, (int32_t)i) == (i * 16383u + 100u) / 200u && (!i || ctl_value(C_RATE, (int32_t)i) > ctl_value(C_RATE, (int32_t)i - 1));
+    check("VIB RATE: 201 distinct NRPN values, 0 and 16383 at the ends", ok && ctl_value(C_RATE, VIB_RATE_MAX) == 16383u);
+    for (i = 0, ok = 1; i <= PCT_MAX; i++)
+        ok &= !i || ctl_value(C_WIDTH, (int32_t)i) > ctl_value(C_WIDTH, (int32_t)i - 1);
+    check("VIB WIDTH, SPREAD: 101 distinct CC values", ok && ctl_value(C_WIDTH, PCT_MAX) == 127u);
+    host_nor_erase();
+    power_cycle();
+}
+
+/* ---------------------------------------------------------------- the screen reader (fm1-reader) --- */
+static uint32_t rd_pos;                          /* how far host_sx_out has been read */
+static char rd_text[24][200];
+static uint8_t rd_flags[24], rd_cmd[24];
+static uint32_t rd_n, rd_bad;                    /* frames read; texts breaking the wording rules */
+
+static void rd_take(void)                        /* the frames sent since the last call */
+{
+    rd_n = 0;
+    while (rd_pos < host_sx_out_len) {
+        uint32_t a = rd_pos, b = a, k = 0, i;
+        while (b < host_sx_out_len && host_sx_out[b] != 0xF7)
+            b++;
+        rd_pos = b + 1u;
+        if (rd_n >= 24u || host_sx_out[a] != 0xF0 || b - a < 6u)
+            continue;
+        rd_cmd[rd_n] = host_sx_out[a + 4u];
+        rd_flags[rd_n] = host_sx_out[a + 5u];
+        for (i = a + 6u; i < b && k + 1u < sizeof rd_text[0]; i++)
+            rd_text[rd_n][k++] = host_sx_out[i] ? (char)host_sx_out[i] : '|';   /* (the HELLO's 00 shown as |) */
+        rd_text[rd_n][k] = 0;
+        if (rd_cmd[rd_n] == 16u) {               /* a SAY: ASCII, <= 160, none of the symbols RULES.md bars */
+            const char *t = rd_text[rd_n];
+            int bad = k > 160u || !k;
+            for (i = 0; t[i]; i++)
+                bad |= t[i] < 32 || t[i] > 126 || strchr("/|><*_=#[]{}~^@&$+%", t[i]) != 0;
+            if (bad) {
+                printf("  (against the rules: \"%s\")\n", t);
+                rd_bad++;
+            }
+        }
+        rd_n++;
+    }
+}
+
+static int rd_has(const char *start, uint32_t flags)   /* a SAY beginning so, with those flags, was among them */
+{
+    uint32_t i;
+    for (i = 0; i < rd_n; i++)
+        if (rd_cmd[i] == 16u && rd_flags[i] == flags && !strncmp(rd_text[i], start, strlen(start)))
+            return 1;
+    return 0;
+}
+
+static void rd_frames(uint32_t n)                /* frames, collecting what was said */
+{
+    static char all[24][200];
+    static uint8_t af[24], ac[24];
+    uint32_t got = 0, i;
+    while (n--) {
+        host_frame();
+        rd_take();
+        for (i = 0; i < rd_n && got < 24u; i++, got++) {
+            memcpy(all[got], rd_text[i], sizeof all[0]);
+            af[got] = rd_flags[i];
+            ac[got] = rd_cmd[i];
+        }
+    }
+    for (i = 0; i < got; i++) {
+        memcpy(rd_text[i], all[i], sizeof all[0]);
+        rd_flags[i] = af[i];
+        rd_cmd[i] = ac[i];
+    }
+    rd_n = got;
+}
+
+static void rd_hello(void)
+{
+    static const uint8_t HELLO[] = {0x7D, 0x53, 0x52, 0x01, 0x01};
+    host_sysex_in(HELLO, sizeof HELLO);
+}
+
+static void reader(void)
+{
+    static const uint8_t BYE[] = {0x7D, 0x53, 0x52, 0x02}, WHERE[] = {0x7D, 0x53, 0x52, 0x03},
+                         UPDATE[] = {0x00, 0x59, 0x11, 0x00, 0x00, 0x00, 0x00};
+    uint8_t ANSWER[7u + sizeof SR_NAME];         /* F0 7D 53 52 01 01 <SR_NAME> 00 F7 */
+    uint32_t i, says;
+    memcpy(ANSWER, (const uint8_t[]){0xF0, 0x7D, 0x53, 0x52, 0x01, 0x01}, 6u);
+    memcpy(ANSWER + 6u, SR_NAME, sizeof SR_NAME - 1u);
+    ANSWER[5u + sizeof SR_NAME] = 0x00;
+    ANSWER[6u + sizeof SR_NAME] = 0xF7;
+    host_nor_erase();
+    power_cycle();
+    host_sx_out_len = rd_pos = 0;
+    host_turn(EN_K3, 3);
+    host_frame();
+    press(B_GLO);
+    frames(20);
+    check("reader: silent until a HELLO (nothing sent)", host_sx_out_len == 0u);
+    host_sysex_in(UPDATE, sizeof UPDATE);         /* the update protocol's frame: not the app's */
+    host_frame();
+    check("reader: another SysEx frame is left for the update entry", host_sx_ready && host_sx_out_len == 0u);
+    host_sx_ready = 0;
+    press(B_HOME);
+    host_turn(EN_K3, -3);
+    host_frame();
+    rd_hello();
+    host_frame();
+    check("reader: HELLO answered, byte for byte (F0 7D 53 52 01 01 LOOCHING 2026 <version> 00 F7)",
+          host_sx_out_len >= sizeof ANSWER && !memcmp(host_sx_out, ANSWER, sizeof ANSWER) && !host_sx_ready);
+    rd_frames(10);
+    printf("  (HELLO, then: \"%s\" ...)\n", rd_n > 1u ? rd_text[1] : "");
+    check("reader: a new reader hears the whole page (MAIN: stopped, the row, the limits, mode, level, voices)",
+          rd_has("looching, stopped. tone row, the Original. vibrato rate 0.50 hertz, vibrato width 1.0 percent, "
+                 "spread 1.0 percent. original mode, level 80 percent.", SR_NOW) &&
+              rd_has("no voices sounding.", 0u));
+
+    press(B_GLO);
+    rd_frames(20);
+    check("reader: GLO: \"preferences. mode original, MIDI out on, ...\"", rd_has("preferences. mode original, MIDI out on", SR_NOW));
+    host_turn(EN_K2, -1);
+    rd_frames(12);
+    check("reader: GLO KNOB 2: \"MIDI out off\"", rd_has("MIDI out off", SR_NOW));
+    host_turn(EN_K2, 1);
+    rd_frames(12);
+    press(B_EDIT);
+    rd_frames(20);
+    check("reader: INFO: the Info panel in words", rd_has("info. Looching, from Brad Garton", SR_NOW));
+    press(B_HOME);
+    rd_frames(30);
+    host_turn(EN_K1, 1);
+    rd_frames(2);
+    check("reader: a knob: nothing while it is still moving", rd_n == 0u);
+    rd_frames(10);
+    printf("  (knob: \"%s\")\n", rd_n ? rd_text[0] : "");
+    check("reader: a knob: \"vibrato rate 0.55 hertz\" once it settles", rd_n == 1u && rd_has("vibrato rate 0.55 hertz", SR_NOW));
+    for (says = 0, i = 0; i < 70u; i++) {         /* turning for 1.1 s: said every ~half second meanwhile */
+        host_turn(EN_K3, (i & 1u) ? 1 : -1);
+        rd_frames(1);
+        says += rd_n;
+    }
+    printf("  (turning for 1.1 s: said %u times)\n", says);
+    check("reader: a knob turned for 1.1 s: said every ~half second meanwhile (2)", says == 2u);
+    rd_frames(20);
+    host_turn(EN_PRESET, 1);
+    rd_frames(12);
+    check("reader: PRESETS: \"tone row, morning stuff\"", rd_has("tone row, morning stuff", SR_NOW));
+    host_turn(EN_ALGO, 1);
+    rd_frames(12);
+    check("reader: ALGORITHM: \"intended mode\"", rd_has("intended mode", SR_NOW));
+    host_turn(EN_ALGO, -1);
+    host_turn(EN_PRESET, -1);
+    rd_frames(12);
+
+    rd_hello();
+    press(B_PLAY);
+    host_render(buf, CTL);                       /* the ISR takes RELAX */
+    rd_frames(2);
+    check("reader: RELAX: \"relax, looching\" at once", rd_has("relax, looching", SR_NOW));
+    snd_note(2);                                 /* a note on voice 3 (as the scheduler would) */
+    snd.v[2].remain = 1 << 30;
+    host_render(buf, 4096);
+    rd_frames(2);
+    printf("  (note: \"%s\")\n", rd_n ? rd_text[0] : "");
+    check("reader: a note: \"voice 3, <frequency> hertz\", queued (not cutting in)",
+          snd.pub_f0c[2] == 0u || (rd_has("voice 3, ", 0u) && strstr(rd_text[0], " hertz") != 0));
+    press(B_PLAY);
+    host_render(buf, 4096);
+    rd_frames(2);
+    check("reader: ENOUGH!: \"enough, stopped\" at once", rd_has("enough, stopped", SR_NOW));
+    press(B_SEQ);
+    rd_frames(2);
+    check("reader: a SOON note: \"coming soon, density\"", rd_has("coming soon, density", SR_NOW));
+    host_press(B_SAVE, 1);
+    rd_frames(40);
+    check("reader: SAVE held: \"defaults, not saved\"", rd_has("defaults, not saved", SR_NOW));
+    host_press(B_SAVE, 0);
+    rd_frames(2);
+    press(B_SAVE);
+    rd_frames(2);
+    check("reader: SAVE: \"saved\"", rd_has("saved", SR_NOW));
+    flash_ok = 0;
+    press(B_SAVE);
+    rd_frames(2);
+    check("reader: SAVE FAILED: a warning (NOW + KEEP)", rd_has("save failed", SR_NOW | SR_KEEP));
+    flash_ok = 1;
+    rd_frames(30);
+
+    for (i = 0; i < NPAGES; i++) {               /* WHERE on every page, both modes: the whole page, within the rules */
+        uint32_t m;
+        for (m = 0; m < NMODES; m++) {
+            rd_hello();
+            ui.page = (uint8_t)i;
+            set.mode = (uint8_t)m;
+            rd_frames(30);
+            host_sysex_in(WHERE, sizeof WHERE);
+            rd_frames(4);
+            if (!rd_has(i == PG_GLO ? "preferences" : i == PG_INFO ? "info" : "looching", SR_NOW)) {
+                printf("  (WHERE on page %u: nothing)\n", i);
+                rd_bad++;
+            }
+        }
+    }
+    set.mode = MODE_ORIGINAL;
+    press(B_HOME);
+    rd_frames(30);
+    check("reader: every text ASCII, <= 160 characters, none of the symbols RULES.md bars", rd_bad == 0u);
+
+    host_sx_room = 0;                            /* the USB queue full: dropped, nothing waits */
+    {
+        uint32_t d0 = sr.dropped, len0 = host_sx_out_len;
+        host_turn(EN_K1, 1);
+        frames(20);
+        check("reader: the USB queue full: the message dropped, nothing sent, no wait", host_sx_out_len == len0 && sr.dropped > d0);
+    }
+    host_sx_room = 64;
+    rd_frames(20);
+    host_sysex_in(BYE, sizeof BYE);
+    rd_frames(2);
+    host_turn(EN_K1, 1);
+    rd_frames(20);
+    check("reader: BYE: silent again", rd_n == 0u && !sr_on());
+    rd_hello();
+    rd_frames(3);
+    check("reader: HELLO after BYE: the whole page again", rd_has("looching, stopped.", SR_NOW));
+    frames(5000u / 16u + 10u);                   /* no HELLO for 5 s: gone */
+    check("reader: no HELLO for 5 s: silent", !sr_on());
+    host_sx_out_len = rd_pos = 0;
+    host_nor_erase();
+    power_cycle();
+}
+
 int main(void)
 {
     if (system("mkdir -p build/shots"))
@@ -701,6 +1029,8 @@ int main(void)
     voice();
     scheduler();
     looching();
+    midi_ctl();
+    reader();
     puts(failed ? "APP TEST FAILED" : "app test passed");
     return failed ? 1 : 0;
 }
