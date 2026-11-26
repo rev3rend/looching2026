@@ -10,6 +10,9 @@ synthesizer: four slow wavetable voices on a lazy random scheduler, with the ori
 **Try it in your browser:** [the Looching 2026 emulator](https://claude.ai/artifact/PEsiVZXfoezkMuoeRzFwy3): press
 *Switch on*, then **PLAY**, and give the drones a few seconds to arrive.
 
+**Install it on your FM-1:** [the web installer](https://rev3rend.github.io/looching2026/webapp/installer/) (Chrome or
+Edge, FM-1 connected by USB) writes the latest release. It can also return the FM-1 to the official firmware.
+
 ![The three pages: MAIN with four voices sounding, Preferences, Info](docs/images/pages.png)
 
 Version 1.0 ([release](https://github.com/rev3rend/looching2026/releases/tag/v1.0): `looching2026-1.0.fwsc`). It runs
@@ -76,16 +79,21 @@ There is no MIDI in. Details: [docs/SPEC.md](docs/SPEC.md#midi).
 
 ## Installing
 
-Download `looching2026-1.0.fwsc` from the [release](https://github.com/rev3rend/looching2026/releases/tag/v1.0)
+The easiest way: open [the web installer](https://rev3rend.github.io/looching2026/webapp/installer/) in Chrome or
+Edge, connect the FM-1 by USB, press **Install**, and allow MIDI when the browser asks. It always offers the latest
+release (each published release updates it: `.github/workflows/pages.yml`), and its *Return to official V15* puts
+M-VAVE's firmware back.
+
+From the command line instead: download `looching2026-1.0.fwsc` from the [release](https://github.com/rev3rend/looching2026/releases/tag/v1.0)
 (check it against `SHA256SUMS`), connect the FM-1 by USB and, from a checkout of this repository:
 
 ```sh
 python3 tools/fm1_install.py looching2026-1.0.fwsc   # needs mido and python-rtmidi
 ```
 
-or with the web installer (Chrome or Edge): `python3 web/make_site.py looching2026-1.0.fwsc v1.0 build/site`, serve
-`build/site` and open `/webapp/installer/`. At power-on the bottom line shows `LOOCHING 2026 v1.0`. A build of your
-own is `build/firmware.fwsc`. Read [Safety](#safety) first.
+At power-on the bottom line shows `LOOCHING 2026 v1.0`. A build of your own is `build/firmware.fwsc`; to try the
+installer page with it locally: `python3 web/make_site.py build/firmware.fwsc dev build/site`, serve `build/site` and
+open `/webapp/installer/`. Read [Safety](#safety) first.
 
 ## Build and test
 

@@ -32,6 +32,7 @@
 <body>
 <main>
   <h1 id="title">Firmware</h1>
+  <p id="about" hidden></p>
   <p>Connect the FM-1 by USB, directly to the computer. (Works in Chrome or Edge.)</p>
   <p>Do not unplug the USB cable while writing.</p>
   <p class="small">This is custom firmware: you use it at your own risk; there is no warranty. If an install fails and
@@ -86,6 +87,17 @@ const lock = (on) => {
   $("stock-file").disabled = on; $("stock-builtin").disabled = on || !meta.stock;
 };
 if (!meta.stock) $("stock-builtin").hidden = true;
+if (meta.about || (meta.links || []).length) {   /* what the firmware is, and where to try it or read its source */
+  const about = $("about");
+  if (meta.about) about.append(meta.about);
+  (meta.links || []).forEach((l, i) => {
+    const a = document.createElement("a");
+    a.href = l.href; a.textContent = l.text;
+    if (/^https?:/.test(l.href)) { a.target = "_blank"; a.rel = "noopener"; }
+    about.append(i || meta.about ? (i ? " · " : " ") : "", a);
+  });
+  about.hidden = false;
+}
 window.addEventListener("beforeunload", (e) => { if (writing) { e.preventDefault(); e.returnValue = TEXT.leave; } });
 
 (async () => {

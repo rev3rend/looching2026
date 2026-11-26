@@ -14,12 +14,16 @@
 
   web/make_site.py build/firmware.fwsc VERSION OUT_DIR [NAME]
 
+The installer names the firmware by docs/PROJECT.json's title (else APP_NAME), says its description, and links the
+emulator (when built) and SITE_SOURCE (an environment variable: the repository's URL, e.g. on GitHub Pages).
+
 The package must be one made by tools/build.py (the platform's own loader, no vendor files). Its identity
 (FM-1_9xx) is read from the package; the device must report it after the install. Try it locally:
   python3 web/make_site.py build/firmware.fwsc dev build/site && python3 -m http.server -d build/site 8000
   then http://localhost:8000/webapp/installer/ in Chrome or Edge (WebMIDI needs localhost or https).
 """
 import json
+import os
 import re
 import shutil
 import sys
@@ -40,7 +44,17 @@ def product_of(raw):
     return "".join(chr((m - i - 1) & 0xFF) for i in range(BLOCKS) if (m := raw[i * BLK + KEEP]) != 0x7D)
 
 
+def project():
+    """docs/PROJECT.json (the setup's answers), {} without it"""
+    try:
+        return json.loads((ROOT / "docs" / "PROJECT.json").read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return {}
+
+
 def app_name():
+    if project().get("title"):
+        return project()["title"]
     m = re.search(r'^#define APP_NAME "([^"]*)"', (ROOT / "firmware/app/app.c").read_text(), re.M)
     return m.group(1) if m else "Firmware"
 
@@ -60,8 +74,15 @@ def main(pkg, version, out, name=None):
         strip_module((HERE / "fm1ota.js").read_text(encoding="utf-8"))
     file = f"firmware-{re.sub(r'[^A-Za-z0-9.-]', '-', version)}.fwsc"
     stock = ROOT / "vendor" / "m-vave" / "FM-1_015.fwsc"
+    emu = ROOT / "build" / "emu"
+    links = []
+    if (emu / "emu.wasm").exists():
+        links.append({"text": "Try it in the browser emulator", "href": "../emu/"})
+    if os.environ.get("SITE_SOURCE"):
+        links.append({"text": "Source, releases and manual", "href": os.environ["SITE_SOURCE"]})
     meta = json.dumps({"name": name, "version": version, "product": product, "pkg": "../../firmware/" + file,
-                       "stock": "../../firmware/FM-1_015.fwsc" if stock.exists() else ""})
+                       "stock": "../../firmware/FM-1_015.fwsc" if stock.exists() else "",
+                       "about": project().get("description", ""), "links": links})
     for mark in ("/*LIB*/", "/*META*/"):
         if html.count(mark) != 1:
             raise SystemExit(f"installer.html must contain {mark} once; update make_site.py")
@@ -88,7 +109,6 @@ def main(pkg, version, out, name=None):
         encoding="utf-8")
     for doc in ("LICENSE", "LICENSING.md"):
         shutil.copy(ROOT / doc, fw / doc)
-    emu = ROOT / "build" / "emu"
     if (emu / "emu.wasm").exists():
         shutil.copytree(emu, out / "webapp" / "emu", dirs_exist_ok=True)
     (out / "index.html").write_text(

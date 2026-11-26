@@ -1,0 +1,104 @@
+# SPDX-License-Identifier: GPL-3.0-only
+# Copyright (C) 2026 R. Luke DuBois and Brad Garton
+# The installer site on GitHub Pages (https://<owner>.github.io/<repo>/): for each published release, the web installer
+# with that release's package (as uploaded to the release, checked against its SHA256SUMS), the official V15 for the
+# way back, the licences, and the browser emulator built from the release's tag. The site's tools (web/make_site.py,
+# web/installer.html) come from the default branch. Run by hand (workflow_dispatch) it publishes the latest release.
+name: installer site
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  site:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}webapp/installer/
+    steps:
+      - name: Which release
+        id: rel
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.event.release.tag_name }}
+        run: |
+          tag="$TAG"
+          [ -n "$tag" ] || tag=$(gh release view -R "$GITHUB_REPOSITORY" --json tagName -q .tagName)
+          echo "release: $tag"
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+
+      - name: The site's tools (default branch)
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+
+      - name: The release's code (for its emulator)
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ steps.rel.outputs.tag }}
+          path: rel
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Cache Emscripten (and the tools CI keeps with it)
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.jieli
+            ~/fw-AC79_AIoT_SDK
+            ~/emsdk
+          key: fm1-tools-v1-${{ hashFiles('.claude/skills/fm1-platform/scripts/setup_env.sh', 'tools/get_toolchain.sh') }}
+
+      - name: Set up
+        run: sh .claude/skills/fm1-platform/scripts/setup_env.sh --emsdk
+
+      - name: The release's package
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.rel.outputs.tag }}
+        run: |
+          mkdir -p build/dl
+          gh release download "$TAG" -R "$GITHUB_REPOSITORY" -p '*.fwsc' -p SHA256SUMS -D build/dl
+          cd build/dl
+          ls *.fwsc
+          sha256sum --check --ignore-missing SHA256SUMS
+          [ "$(ls *.fwsc | wc -l)" -eq 1 ]
+
+      - name: The release's emulator
+        env:
+          TAG: ${{ steps.rel.outputs.tag }}
+        run: |
+          . ~/emsdk/emsdk_env.sh
+          cd rel
+          python3 -c 'import sys; sys.path.insert(0, "tools"); import build; build.generate()'
+          EMU_VERSION="$TAG" sh web/emu/build.sh
+          mkdir -p ../build && cp -R build/emu ../build/emu
+
+      - name: The site
+        env:
+          TAG: ${{ steps.rel.outputs.tag }}
+        run: |
+          SITE_SOURCE="https://github.com/$GITHUB_REPOSITORY" python3 web/make_site.py build/dl/*.fwsc "$TAG" build/site
+          touch build/site/.nojekyll
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: build/site
+
+      - name: Deploy
+        id: deploy
+        uses: actions/deploy-pages@v4

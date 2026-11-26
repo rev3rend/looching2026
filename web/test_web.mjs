@@ -126,7 +126,8 @@ async function site() {
     return;
   }
   const out = mkdtempSync(join(tmpdir(), "fm1-site-"));
-  execFileSync("python3", [join(HERE, "make_site.py"), pkg, "test", out]);
+  execFileSync("python3", [join(HERE, "make_site.py"), pkg, "test", out],
+    { env: { ...process.env, SITE_SOURCE: "https://example.org/repo" } });
   const html = readFileSync(join(out, "webapp/installer/index.html"), "utf8");
   ok(!html.includes("/*LIB*/") && !html.includes("/*META*/"), "installer page: library and metadata filled in");
   const script = html.slice(html.indexOf('<script type="module">') + 22, html.lastIndexOf("</script>"));
@@ -135,6 +136,9 @@ async function site() {
   ok(parsed, "installer page: its script parses");
   ok(existsSync(join(out, "firmware/firmware-test.fwsc")) && existsSync(join(out, "firmware/LICENSES/index.html")),
     "installer page: the package and its licences beside it");
+  const meta = JSON.parse(html.match(/const meta = (\{.*?\});/)[1]);
+  ok(meta.name && meta.about && meta.links.some((l) => l.href === "https://example.org/repo"),
+    "installer page: the name, what it is (PROJECT.json), the source link (SITE_SOURCE)");
 }
 
 await packages();
